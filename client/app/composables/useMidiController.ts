@@ -13,7 +13,7 @@ export type MidiActionId =
   | 'trigger-slot-4' | 'trigger-slot-5' | 'trigger-slot-6' | 'trigger-slot-7'
   | 'trigger-slot-8' | 'trigger-slot-9' | 'trigger-slot-10' | 'trigger-slot-11'
   | 'trigger-slot-12' | 'trigger-slot-13' | 'trigger-slot-14' | 'trigger-slot-15'
-  | 'pause-resume' | 'toggle-loop' | 'cue-to-continue' | 'jump-cue' | 'stop-all' | 'master-volume'
+  | 'pause-resume' | 'toggle-loop' | 'cue-to-continue' | 'jump-cue' | 'stop-all' | 'stop-selected' | 'master-volume'
   | 'select-up' | 'select-down' | 'play-selected' | 'play-next';
 
 // Config stored in midi-config.json
@@ -42,6 +42,7 @@ export const MIDI_ACTIONS: { id: MidiActionId; labelKey: string; category: strin
   { id: 'cue-to-continue', labelKey: 'controls.cueToContinue', category: 'Playback', continuous: false },
   { id: 'jump-cue',      labelKey: 'controls.jumpCue',      category: 'Playback', continuous: false },
   { id: 'stop-all',      labelKey: 'controls.stopAll',      category: 'Playback', continuous: false },
+  { id: 'stop-selected', labelKey: 'controls.stopSelected', category: 'Playback', continuous: false },
   { id: 'select-up',     labelKey: 'controls.selectUp',     category: 'Playback', continuous: false },
   { id: 'select-down',   labelKey: 'controls.selectDown',   category: 'Playback', continuous: false },
   { id: 'play-selected', labelKey: 'controls.playSelected', category: 'Playback', continuous: false },
@@ -265,6 +266,19 @@ export const useMidiController = () => {
       const item = findProjectItem(uuid);
       if (!item || item.type !== 'audio') return;
       playCue(item as import('~/types/project').AudioItem);
+      return;
+    }
+
+    if (actionId === 'stop-selected') {
+      const uuids = Array.from(selectedItems.value);
+      if (uuids.length === 0) {
+        if (selectedItem.value) stopItemAny(selectedItem.value);
+        return;
+      }
+      for (const uuid of uuids) {
+        const item = findProjectItem(uuid);
+        if (item) stopItemAny(item);
+      }
       return;
     }
 

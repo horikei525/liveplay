@@ -721,7 +721,8 @@
     "playNext": "Play Next",
     "volumeMultiplier": "Volume Multiplier",
     "volumeMultiplierHint": "dB per MIDI step. Raise it for encoders or wheels that move in small steps.",
-    "nextIn": "Next in {seconds}s"
+    "nextIn": "Next in {seconds}s",
+    "stopSelected": "Stop Selected"
   },
   "selectProject": {
     "title": "Select Project",

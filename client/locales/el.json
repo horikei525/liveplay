@@ -721,7 +721,8 @@
     "playNext": "Αναπαραγωγή επόμενου",
     "volumeMultiplier": "Πολλαπλασιαστής έντασης",
     "volumeMultiplierHint": "dB ανά βήμα MIDI. Αυξήστε τον για encoder ή τροχούς που κινούνται με μικρά βήματα.",
-    "nextIn": "Επόμενο σε {seconds} δευτ."
+    "nextIn": "Επόμενο σε {seconds} δευτ.",
+    "stopSelected": "Stop Selected"
   },
   "selectProject": {
     "title": "Επιλογή εκδήλωσης",

@@ -212,6 +212,19 @@ export const useCartHotkeys = () => {
       return;
     }
 
+    if (action === 'stop-selected') {
+      const uuids = Array.from(selectedItems.value);
+      if (uuids.length === 0) {
+        if (selectedItem.value) stopItemAny(selectedItem.value);
+        return;
+      }
+      for (const uuid of uuids) {
+        const item = findItemByUuid(uuid);
+        if (item) stopItemAny(item);
+      }
+      return;
+    }
+
     if (action === 'play-next') {
       const effectiveUuid = nextItemOverrideUuid.value ?? autoNextItemUuid.value;
       if (!effectiveUuid) return;

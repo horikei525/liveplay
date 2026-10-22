@@ -75,6 +75,7 @@ const PLAYBACK_ACTIONS: { id: PlaybackKeyAction; labelKey: string }[] = [
   { id: 'cue-to-continue', labelKey: 'controls.cueToContinue'  },
   { id: 'jump-cue',        labelKey: 'controls.jumpCue'        },
   { id: 'stop-all',        labelKey: 'controls.stopAll'        },
+  { id: 'stop-selected',   labelKey: 'controls.stopSelected'   },
   { id: 'select-up',       labelKey: 'controls.selectUp'       },
   { id: 'select-down',     labelKey: 'controls.selectDown'     },
   { id: 'play-selected',   labelKey: 'controls.playSelected'   },

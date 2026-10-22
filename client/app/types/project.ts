@@ -152,6 +152,7 @@ export type PlaybackKeyAction =
   | 'cue-to-continue'
   | 'jump-cue'
   | 'stop-all'
+  | 'stop-selected'
   | 'select-up'
   | 'select-down'
   | 'play-selected'
@@ -657,6 +658,7 @@ export const DEFAULT_PLAYBACK_KEYS: Partial<Record<PlaybackKeyAction, CartSlotKe
   'play-next':     { key: ' ',         ctrlKey: false, shiftKey: false, altKey: false },
   'pause-resume':  { key: 'p',         ctrlKey: false, shiftKey: false, altKey: false },
   'stop-all':      { key: 'Escape',    ctrlKey: false, shiftKey: false, altKey: false },
+  'stop-selected': { key: 's',         ctrlKey: false, shiftKey: false, altKey: false },
   'select-up':     { key: 'ArrowUp',   ctrlKey: false, shiftKey: false, altKey: false },
   'select-down':   { key: 'ArrowDown', ctrlKey: false, shiftKey: false, altKey: false },
   'play-selected': { key: 'Enter',     ctrlKey: false, shiftKey: false, altKey: false },
