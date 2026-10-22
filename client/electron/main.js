@@ -582,7 +582,12 @@ async function startLiveplayServer() {
   // window (Windows) or its own Terminal window (macOS) so the user can
   // see it in the taskbar/dock and stop it directly. We pass --pidfile so
   // the server writes its real PID to the lockfile — necessary on Windows
-  // because `cmd /c start` returns the PID of cmd.exe, not the server.
+  // Ensure logs directory exists to prevent any file write ENOENT errors
+  const logsDir = path.join(app.getPath('userData'), 'logs');
+  if (!fs.existsSync(logsDir)) {
+    try { fs.mkdirSync(logsDir, { recursive: true }); } catch {}
+  }
+
   const lockPath = liveplayLockPath();
   // Pre-clear any stale lock so the freshly-started server's write is the
   // canonical one and our tryReattach race-condition window is minimal.

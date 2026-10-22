@@ -176,6 +176,10 @@ jobs:
           }
           Get-ChildItem "server/build" -Filter "*.dll" -ErrorAction SilentlyContinue |
             ForEach-Object { Copy-Item $_.FullName "server/build/Release/" -Force }
+          if ($env:VCToolsRedistDir) {
+            Get-ChildItem -Path "$env:VCToolsRedistDir\x64\Microsoft.VC*.CRT" -Filter "*.dll" -Recurse -ErrorAction SilentlyContinue |
+              ForEach-Object { Copy-Item $_.FullName "server/build/Release/" -Force }
+          }
 
       - name: Build macOS server .app bundle
         if: runner.os == 'macOS'
