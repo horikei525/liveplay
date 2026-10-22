@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - school-edition
     paths:
       - 'package.json'
   workflow_dispatch:

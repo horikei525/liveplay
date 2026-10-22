@@ -426,7 +426,7 @@ const { t, direction, initLocale, isLocaleLoaded } = useI18n();
 const baseURL = useRuntimeConfig().app.baseURL;
 const asset = (path: string) => `${baseURL}${path.replace(/^\/+/, '')}`;
 
-const version = ref('2.5.2');
+const version = ref('252.0.0');
 
 const contributors = ref<{ name: string; link: string }[]>([]);
 

@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, Menu, protocol, screen } = require('electron');
+app.commandLine.appendSwitch('proxy-bypass-list', '<local>;127.0.0.1;localhost;*.local');
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
@@ -472,7 +473,8 @@ function clearRecentProjects() {
 // only runs once per machine (a marker file guards repeat work).
 // ---------------------------------------------------------------------------
 function ensureFirewallRules() {
-  if (process.platform !== 'win32') return;
+  // School Edition: All traffic is bound to 127.0.0.1 loopback only; no firewall rule elevation needed
+  return;
   // Marker is versioned: bumping the suffix forces a one-time re-run so
   // existing installs that only got the old UDP-only pass pick up the new
   // server TCP rule.
@@ -591,6 +593,8 @@ async function startLiveplayServer() {
   console.log(`[liveplay-server] launching (${silent ? 'silent, tray icon' : 'visible console'})`, exePath, 'on port', cfg.localPort);
   const serverArgs = [
     '--port',    String(cfg.localPort),
+    '--bind',    '127.0.0.1',
+    '--no-discovery',
     '--pidfile', lockPath,
   ];
   try {
@@ -899,8 +903,10 @@ function sendSolicitation() {
 }
 
 function startDiscoveryListener() {
+  // School Edition: LAN auto-discovery is completely disabled to avoid Windows Defender Firewall prompts
   if (discoveryStarted) return;
   discoveryStarted = true;
+  return;
   try {
     discoverySocket = dgram.createSocket({ type: 'udp4', reuseAddr: true });
   } catch (e) {
@@ -1718,7 +1724,7 @@ function startAPIServer(port = 8080, maxAttempts = 10) {
 
   // Try to start server, incrementing port if already in use
   const tryListen = (currentPort, attemptsLeft) => {
-    const server = apiApp.listen(currentPort)
+    const server = apiApp.listen(currentPort, '127.0.0.1')
       .on('listening', () => {
         apiServer = server;
         console.log(`LivePlay API Server running on http://localhost:${currentPort}`);

@@ -256,6 +256,7 @@ struct CliOptions {
     std::string bind_addr = "0.0.0.0";
     std::string pidfile;                   // optional; if set, write JSON {pid,port,startedAt}
     bool        silent = false;            // --silent: no console, a tray icon instead
+    bool        no_discovery = false;      // --no-discovery: disable LAN UDP discovery beacon
     bool        verbose   = false;
     int         start_delay_ms = 0;        // wait before binding (crash-restart uses this)
 
@@ -643,6 +644,8 @@ CliOptions parse_cli(int argc, char** argv, const std::filesystem::path& exe_dir
             // Acted on before parse_cli runs (see main); consumed here so it
             // is not reported as unknown.
             opts.silent = true;
+        } else if (a == "--no-discovery") {
+            opts.no_discovery = true;
         } else if (a == "--start-delay-ms") {
             // No mark: not a config-file key, so it has no settings-page row.
             next(opts.start_delay_ms, 0, 600'000, "startDelayMs");
@@ -1329,11 +1332,16 @@ int server_main(int argc, char** argv) {
     // ------------------------------------------------------------------
     // LAN auto-discovery beacon — best-effort, non-fatal if it can't bind.
     // ------------------------------------------------------------------
-    net::DiscoveryConfig disc_cfg;
-    disc_cfg.advertised_port = static_cast<std::uint16_t>(opts.port);
-    auto beacon = std::make_unique<net::DiscoveryBeacon>(*project, disc_cfg);
-    if (!beacon->start()) {
-        Logger::warn("LAN discovery beacon disabled (clients must connect by IP).");
+    std::unique_ptr<net::DiscoveryBeacon> beacon;
+    if (!opts.no_discovery && opts.bind_addr != "127.0.0.1") {
+        net::DiscoveryConfig disc_cfg;
+        disc_cfg.advertised_port = static_cast<std::uint16_t>(opts.port);
+        beacon = std::make_unique<net::DiscoveryBeacon>(*project, disc_cfg);
+        if (!beacon->start()) {
+            Logger::warn("LAN discovery beacon disabled (clients must connect by IP).");
+        }
+    } else {
+        Logger::info("LAN discovery beacon disabled (School Edition / localhost only).");
     }
 
     // ------------------------------------------------------------------
