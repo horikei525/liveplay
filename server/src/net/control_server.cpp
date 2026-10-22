@@ -448,14 +448,14 @@ std::optional<long long> optional_fade_ms(const json& j) {
 }
 
 crow::response json_ok(const json& body) {
-    crow::response r{200, body.dump()};
+    crow::response r{200, body.dump(-1, ' ', false, json::error_handler_t::replace)};
     r.add_header("Content-Type", "application/json");
     r.add_header("Access-Control-Allow-Origin", g_cors_allow_origin);
     return r;
 }
 
 crow::response json_err(int status, std::string_view message) {
-    crow::response r{status, json({{"error", message}}).dump()};
+    crow::response r{status, json({{"error", message}}).dump(-1, ' ', false, json::error_handler_t::replace)};
     r.add_header("Content-Type", "application/json");
     r.add_header("Access-Control-Allow-Origin", g_cors_allow_origin);
     return r;
@@ -3986,8 +3986,9 @@ void ControlServer::install_routes() {
                     // which made opening a project off removable media painful
                     // on Linux especially. (#31)
 #if defined(_WIN32)
-                    if (const char* up = std::getenv("USERPROFILE"))
-                        add_entry("Home", up, "home");
+                    if (const wchar_t* wup = _wgetenv(L"USERPROFILE")) {
+                        add_entry("Home", liveplay::util::path_to_utf8(std::filesystem::path{wup}), "home");
+                    }
 #else
                     if (const char* hp = std::getenv("HOME"))
                         add_entry("Home", hp, "home");

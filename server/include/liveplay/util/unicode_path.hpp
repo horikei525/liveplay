@@ -61,7 +61,7 @@ inline std::string path_to_utf8(const std::filesystem::path& p) {
     const int len = WideCharToMultiByte(CP_UTF8, 0, w.data(),
                                         static_cast<int>(w.size()),
                                         nullptr, 0, nullptr, nullptr);
-    if (len <= 0) return p.string();
+    if (len <= 0) return {};
     std::string s(static_cast<std::size_t>(len), '\0');
     WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()),
                         s.data(), len, nullptr, nullptr);
