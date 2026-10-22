@@ -3,7 +3,7 @@ app.commandLine.appendSwitch('proxy-bypass-list', '<local>;127.0.0.1;localhost;*
 const { autoUpdater } = require('electron-updater');
 const path = require('path');
 const fs = require('fs');
-const { spawn, exec } = require('child_process');
+const { spawn, exec, execFile } = require('child_process');
 const express = require('express');
 const youtubesearchapi = require('youtube-search-api');
 const YTDlpWrap = require('yt-dlp-wrap').default;
@@ -3381,25 +3381,291 @@ ipcMain.handle('generate-waveform', async (event, audioFilePath, outputPath) => 
   });
 });
 
+// YouTube Search Helpers & Multi-tier Fallback
+function extractYouTubeVideoId(input) {
+  if (!input || typeof input !== 'string') return null;
+  const trimmed = input.trim();
+  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
+    return trimmed;
+  }
+  const match = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?.*v=|embed\/|shorts\/|v\/))([a-zA-Z0-9_-]{11})/i);
+  return match ? match[1] : null;
+}
+
+function fetchYouTubeVideoDetails(videoId) {
+  return new Promise((resolve) => {
+    const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+    const req = https.get(oembedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+      },
+      timeout: 5000
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try {
+          if (res.statusCode === 200) {
+            const parsed = JSON.parse(data);
+            return resolve({
+              id: videoId,
+              title: parsed.title || `YouTube Video (${videoId})`,
+              thumbnail: parsed.thumbnail_url || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+              channelTitle: parsed.author_name || '',
+              length: ''
+            });
+          }
+        } catch (e) {}
+        resolve({
+          id: videoId,
+          title: `YouTube Video (${videoId})`,
+          thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+          channelTitle: '',
+          length: ''
+        });
+      });
+    });
+    req.on('timeout', () => {
+      req.destroy();
+      resolve({
+        id: videoId,
+        title: `YouTube Video (${videoId})`,
+        thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        channelTitle: '',
+        length: ''
+      });
+    });
+    req.on('error', () => {
+      resolve({
+        id: videoId,
+        title: `YouTube Video (${videoId})`,
+        thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        channelTitle: '',
+        length: ''
+      });
+    });
+  });
+}
+
+function searchYouTubeInnertube(query, limit = 20) {
+  return new Promise((resolve, reject) => {
+    const postData = JSON.stringify({
+      context: {
+        client: {
+          clientName: 'WEB',
+          clientVersion: '2.20240101.01.00',
+          hl: 'ja',
+          gl: 'JP'
+        }
+      },
+      query: query
+    });
+
+    const options = {
+      hostname: 'www.youtube.com',
+      port: 443,
+      path: '/youtubei/v1/search',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData),
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8'
+      },
+      timeout: 10000
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        try {
+          if (res.statusCode && res.statusCode >= 400) {
+            return reject(new Error(`Innertube HTTP ${res.statusCode}`));
+          }
+          const parsed = JSON.parse(data);
+          const contents = parsed?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+          const videos = [];
+          for (const section of contents) {
+            const items = section?.itemSectionRenderer?.contents || [];
+            for (const item of items) {
+              const v = item?.videoRenderer;
+              if (v && v.videoId) {
+                const title = v.title?.runs?.map(r => r.text).join('') || v.title?.simpleText || 'Untitled';
+                const thumbs = v.thumbnail?.thumbnails || [];
+                const thumbnail = (thumbs.length > 0 && thumbs[thumbs.length - 1].url)
+                  ? thumbs[thumbs.length - 1].url
+                  : `https://i.ytimg.com/vi/${v.videoId}/hqdefault.jpg`;
+                const channelTitle = v.ownerText?.runs?.map(r => r.text).join('') || v.shortBylineText?.runs?.map(r => r.text).join('') || '';
+                const length = v.lengthText?.simpleText || '';
+                videos.push({
+                  id: v.videoId,
+                  title,
+                  thumbnail,
+                  channelTitle,
+                  length
+                });
+                if (videos.length >= limit) break;
+              }
+            }
+            if (videos.length >= limit) break;
+          }
+          resolve(videos);
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+
+    req.on('timeout', () => {
+      req.destroy(new Error('Innertube search request timed out'));
+    });
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    req.write(postData);
+    req.end();
+  });
+}
+
+function searchYouTubeYtDlp(query, limit = 20) {
+  if (!ytDlpPath || !fs.existsSync(ytDlpPath)) {
+    return Promise.reject(new Error('yt-dlp binary is not available'));
+  }
+  return new Promise((resolve, reject) => {
+    const args = [
+      `ytsearch${limit}:${query}`,
+      '--dump-single-json',
+      '--flat-playlist',
+      '--no-warnings',
+      '--no-check-certificates'
+    ];
+    execFile(ytDlpPath, args, { maxBuffer: 10 * 1024 * 1024, timeout: 20000 }, (error, stdout) => {
+      if (error) {
+        return reject(error);
+      }
+      try {
+        const data = JSON.parse(stdout);
+        const entries = data.entries || [];
+        const videos = entries.map(entry => {
+          let thumb = `https://i.ytimg.com/vi/${entry.id}/hqdefault.jpg`;
+          if (Array.isArray(entry.thumbnails) && entry.thumbnails.length > 0) {
+            thumb = entry.thumbnails[entry.thumbnails.length - 1].url || thumb;
+          }
+          let lengthStr = '';
+          if (typeof entry.duration === 'number' && entry.duration > 0) {
+            const totalSec = Math.round(entry.duration);
+            const hrs = Math.floor(totalSec / 3600);
+            const mins = Math.floor((totalSec % 3600) / 60);
+            const secs = totalSec % 60;
+            if (hrs > 0) {
+              lengthStr = `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            } else {
+              lengthStr = `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
+          }
+          return {
+            id: entry.id,
+            title: entry.title || 'Untitled',
+            thumbnail: thumb,
+            channelTitle: entry.channel || entry.uploader || '',
+            length: lengthStr
+          };
+        }).filter(v => v.id && v.title);
+        resolve(videos);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
+}
+
 // YouTube Search Handler
 ipcMain.handle('search-youtube', async (event, query) => {
-  try {
-    const result = await youtubesearchapi.GetListByKeyword(query, false, 20, [{ type: 'video' }]);
-    
-    // Format results
-    const videos = result.items.map(item => ({
-      id: item.id,
-      title: item.title,
-      thumbnail: item.thumbnail.thumbnails[item.thumbnail.thumbnails.length - 1].url,
-      channelTitle: item.channelTitle,
-      length: item.length?.simpleText || ''
-    }));
-    
-    return videos;
-  } catch (error) {
-    console.error('YouTube search error:', error);
-    throw new Error('YouTube search failed.');
+  const trimmed = (query || '').trim();
+  if (!trimmed) {
+    return [];
   }
+
+  // 1. Check if input is a direct YouTube URL or 11-char Video ID
+  const directId = extractYouTubeVideoId(trimmed);
+  if (directId) {
+    console.log(`Direct YouTube URL/ID detected: ${directId}`);
+    try {
+      const video = await fetchYouTubeVideoDetails(directId);
+      return [video];
+    } catch (e) {
+      console.warn('Direct video lookup failed, using fallback card:', e.message);
+      return [{
+        id: directId,
+        title: `YouTube Video (${directId})`,
+        thumbnail: `https://i.ytimg.com/vi/${directId}/hqdefault.jpg`,
+        channelTitle: '',
+        length: ''
+      }];
+    }
+  }
+
+  let lastError = null;
+
+  // 2. Tier 1: YouTube Innertube API (Zero scraping, official client endpoint, fast)
+  try {
+    const videos = await searchYouTubeInnertube(trimmed, 20);
+    if (videos && videos.length > 0) {
+      return videos;
+    }
+  } catch (error) {
+    console.warn('YouTube Innertube search failed, falling back:', error.message);
+    lastError = error;
+  }
+
+  // 3. Tier 2: youtube-search-api library (with safe parsing)
+  try {
+    const result = await youtubesearchapi.GetListByKeyword(trimmed, false, 20, [{ type: 'video' }]);
+    const items = Array.isArray(result?.items) ? result.items : [];
+    const videos = items
+      .filter(item => item && (item.type === 'video' || item.id))
+      .map(item => {
+        let thumb = `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`;
+        if (item.thumbnail?.thumbnails?.length) {
+          thumb = item.thumbnail.thumbnails[item.thumbnail.thumbnails.length - 1]?.url || thumb;
+        }
+        return {
+          id: item.id,
+          title: item.title || 'Untitled',
+          thumbnail: thumb,
+          channelTitle: item.channelTitle || item.shortBylineText?.runs?.[0]?.text || '',
+          length: item.length?.simpleText || ''
+        };
+      })
+      .filter(v => v.id && v.title);
+
+    if (videos.length > 0) {
+      return videos;
+    }
+  } catch (error) {
+    console.warn('youtube-search-api failed, falling back:', error.message);
+    lastError = error;
+  }
+
+  // 4. Tier 3: yt-dlp search
+  try {
+    const videos = await searchYouTubeYtDlp(trimmed, 20);
+    if (videos && videos.length > 0) {
+      return videos;
+    }
+  } catch (error) {
+    console.warn('yt-dlp search failed:', error.message);
+    lastError = error;
+  }
+
+  if (lastError) {
+    console.error('All YouTube search methods failed:', lastError);
+    throw new Error(`YouTube search failed: ${lastError.message || lastError}`);
+  }
+
+  return [];
 });
 
 // ---- YouTube import format --------------------------------------------
@@ -3469,7 +3735,8 @@ ipcMain.handle('download-youtube-audio', async (event, videoId, title, projectFo
     }
     
     // Clean filename
-    const sanitizedTitle = title.replace(/[<>:"/\\|?*]/g, '').substring(0, 200);
+    const cleanTitle = (title || '').replace(/[<>:"/\\|?*]/g, '').trim().substring(0, 200);
+    const sanitizedTitle = cleanTitle || videoId;
     const fileName = `${sanitizedTitle}.${yt.format}`;
     const outputTemplate = path.join(outputPath, sanitizedTitle);
     
